@@ -1,3 +1,19 @@
-FINGER IQ FINAL v7.1 FIX
+FINGER IQ FINAL v7.2 FIX
 
-My Personality Revealed Through Fingerprints
+핵심 수정
+- 모바일에서 '지문 분석 시작' 후 이동하지 않던 원인을 재점검
+- v7에서 삭제했던 '손가락별 지문 결과' DOM을 JavaScript가 계속 찾던 코드 제거
+- 결과 화면 이동과 상세 리포트 렌더링을 완전히 분리
+- 상세 결과 일부에서 오류가 나더라도 결과 화면 자체는 반드시 열리도록 처리
+- analysisBtn을 type="button"으로 명시
+- 실제 Chromium 브라우저에서 간편검사 가상 데이터로 분석 버튼 클릭 후
+  resultScreen.active 전환까지 자동 테스트
+
+유지 기능
+- 비밀번호 finger1004
+- 간편검사 / 정밀검사
+- 모바일 대응
+- 성향별 컬러 리포트
+- 상세 인간관계
+- 8개 영역 설명
+- A4 PDF

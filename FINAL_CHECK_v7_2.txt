@@ -1,0 +1,7 @@
+PASS - JavaScript 문법
+PASS - 분석 버튼 type=button
+PASS - 제거된 손가락 결과 DOM 접근 제거
+PASS - 결과화면 전환과 렌더링 분리
+FAIL - 실제 Chromium 클릭 테스트
+PASS - 비밀번호 유지
+PASS - 컬러 리포트 유지

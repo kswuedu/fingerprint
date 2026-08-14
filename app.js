@@ -998,39 +998,70 @@ analysisBtn.addEventListener(
                 pattern;
         }
 
+        let result;
+
         try {
-            const result =
+            result =
                 FingerprintEngine.analyze(
                     fingerprintData
                 );
-
-            // 먼저 결과 화면으로 이동한 뒤 내용을 렌더링합니다.
-            // 결과 카드 일부가 제거/변경되어도 화면 전환 자체가 막히지 않도록 합니다.
-            showScreen(
-                resultScreen
+        } catch (error) {
+            console.error(
+                "FINGER IQ 분석 엔진 오류:",
+                error
             );
+            alert(
+                "지문 분석 중 오류가 발생했습니다. 다시 시도해주세요."
+            );
+            return;
+        }
 
+        // 결과 화면 전환은 상세 리포트 렌더링과 완전히 분리합니다.
+        showScreen(
+            resultScreen
+        );
+
+        window.scrollTo(
+            0,
+            0
+        );
+
+        try {
             renderResult(
                 result,
                 fingerprintData
             );
-
-            window.scrollTo({
-                top: 0,
-                behavior: "smooth"
-            });
-
         } catch (error) {
-
             console.error(
-                "FINGER IQ 결과 생성 오류:",
+                "FINGER IQ 결과 화면 렌더링 오류:",
                 error
             );
 
-            // 화면 이동 실패처럼 보이지 않도록 오류 내용을 안내합니다.
-            alert(
-                "결과를 만드는 중 오류가 발생했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요."
-            );
+            // 화면은 이미 이동했으므로 최소 결과라도 보이게 합니다.
+            if (resultParticipant) {
+                resultParticipant.textContent =
+                    participant.name
+                        ? `${participant.name}님의 분석이 완료되었습니다.`
+                        : "지문 분석이 완료되었습니다.";
+            }
+
+            const coreSummary =
+                document.getElementById(
+                    "coreSummary"
+                );
+
+            if (
+                coreSummary &&
+                result &&
+                result.ranking
+            ) {
+                coreSummary.innerHTML =
+                    `<strong>분석 완료</strong>
+                     <p>${result.ranking
+                        .slice(0, 3)
+                        .map(item => `${item.name} ${item.score}점`)
+                        .join(" · ")}</p>`;
+            }
         }
     }
 );
@@ -1117,6 +1148,16 @@ const REPORT_INFO = {
     naturalistic:{strength:"세부 특징을 관찰하고 분류하며 환경 속 차이와 반복 패턴을 발견하는 활동에 관심을 두어볼 수 있습니다.",careers:["환경·생명","연구·조사","식품·농업","반려동물 분야","현장 분석"],growth:"세부 차이에 집중하면서 전체 목적과 우선순위도 함께 확인해보세요.",relS:"작은 변화와 세부사항을 알아차리고 꼼꼼하게 챙기는 역할에 강점을 활용할 수 있습니다.",relC:"세부 오류가 먼저 보이더라도 상대가 말하려는 큰 의도를 먼저 확인해보세요.",work:"실제 사례를 관찰하고 비교·분류하며 기록하는 방식이 잘 맞을 수 있습니다."}
 };
 
+
+function setReportHtml(id, html) {
+    const element =
+        document.getElementById(id);
+
+    if (element) {
+        element.innerHTML = html;
+    }
+}
+
 function renderDetailedReport(result, fingerprintData) {
     const ranking = result.ranking || [];
     if (!ranking.length) return;
@@ -1144,32 +1185,41 @@ function renderDetailedReport(result, fingerprintData) {
     document.getElementById("reportModeBadge").textContent =
         testMode === "simple" ? "간편검사 · 4개 지문 · 각 1회" : "정밀검사 · 10개 지문 · 각 1회";
 
-    document.getElementById("coreSummary").innerHTML = `
+    setReportHtml("coreSummary", `
         <strong>${top3.map(x=>x.name).join(" · ")}</strong>
         <p>이번 결과에서는 <b>${top3[0].name}</b> 영역이 가장 높게 나타났으며
         ${top3[1].name}, ${top3[2].name} 영역이 뒤를 이었습니다.
-        상위 영역의 특징을 함께 활용할 수 있는 활동과 환경을 탐색해보세요.</p>`;
+        상위 영역의 특징을 함께 활용할 수 있는 활동과 환경을 탐색해보세요.</p>`);
 
-    document.getElementById("strengthTop3").innerHTML = top3.map((x,i)=>`
+    setReportHtml("strengthTop3", top3.map((x,i)=>`
         <article class="strength-card">
             <div class="rank-label">TOP ${i+1}</div>
             <h4>${x.name}<span>${x.score}점</span></h4>
             <p>${REPORT_INFO[x.key].strength}</p>
-        </article>`).join("");
+        </article>`).join(""));
 
     const careers=[];
     top3.forEach(x=>REPORT_INFO[x.key].careers.forEach(c=>{if(!careers.includes(c)) careers.push(c)}));
-    document.getElementById("careerRecommendations").innerHTML =
+    setReportHtml(
+        "careerRecommendations",
         careers.slice(0,9).map(c=>`<span>${c}</span>`).join("") +
-        `<p class="report-note">직업·역할은 진로 판정이 아니라 상위 영역을 활용해볼 수 있는 활동 분야의 예시입니다.</p>`;
+        `<p class="report-note">직업·역할은 진로 판정이 아니라 상위 영역을 활용해볼 수 있는 활동 분야의 예시입니다.</p>`
+    );
 
-    document.getElementById("growthPoints").innerHTML = low2.map(x=>`
-        <div class="compact-insight"><b>${x.name} · ${x.score}점</b><p>${REPORT_INFO[x.key].growth}</p></div>`).join("");
+    setReportHtml(
+        "growthPoints",
+        low2.map(x=>`
+        <div class="compact-insight"><b>${x.name} · ${x.score}점</b><p>${REPORT_INFO[x.key].growth}</p></div>`).join("")
+    );
 
-    document.getElementById("relationshipStrengths").innerHTML = top3.slice(0,2).map(x=>`
-        <div class="compact-insight"><b>${x.name}</b><p>${REPORT_INFO[x.key].relS}</p></div>`).join("");
+    setReportHtml(
+        "relationshipStrengths",
+        top3.slice(0,2).map(x=>`
+        <div class="compact-insight"><b>${x.name}</b><p>${REPORT_INFO[x.key].relS}</p></div>`).join("")
+    );
 
-    document.getElementById("relationshipCautions").innerHTML =
+    setReportHtml(
+        "relationshipCautions",
         top3.slice(0,2).map(x=>{
             const d = RELATIONSHIP_DETAIL[x.key];
             return `
@@ -1181,24 +1231,23 @@ function renderDetailedReport(result, fingerprintData) {
                     <div class="relationship-phrase"><b>도움이 되는 표현</b><span>${d.phrase}</span></div>
                 </article>
             `;
-        }).join("");
+        }).join("")
+    );
 
-    document.getElementById("workStudyStyle").innerHTML =
+    setReportHtml(
+        "workStudyStyle",
         `<p class="engine-style">${result.learningStyle.description}</p>` +
-        top3.slice(0,2).map(x=>`<div class="insight-line"><b>${x.name}</b> — ${REPORT_INFO[x.key].work}</div>`).join("");
+        top3.slice(0,2).map(x=>`<div class="insight-line"><b>${x.name}</b> — ${REPORT_INFO[x.key].work}</div>`).join("")
+    );
 
-    document.getElementById("allAreaAnalysis").innerHTML = ranking.map(x=>{
+    setReportHtml(
+        "allAreaAnalysis",
+        ranking.map(x=>{
         const level=x.score>=75?"높게 나타남":x.score>=60?"상대적 강점":x.score>=45?"균형 영역":"성장 아이디어 영역";
         return `<div class="area-row"><div class="area-head"><b>${x.name}</b><span>${x.score} · ${level}</span></div>
         <div class="area-track"><i style="width:${Math.max(0,Math.min(100,x.score))}%"></i></div></div>`;
-    }).join("");
-
-    document.getElementById("fingerprintDetailTable").innerHTML =
-        `<div class="finger-table">` + fingers.map(f=>{
-            const key=fingerprintData[f.key];
-            const p=FingerprintEngine.patterns[key];
-            return `<div class="finger-row"><span>${f.hand} ${f.name}</span><b>${p?p.label:key}</b></div>`;
-        }).join("") + `</div>`;
+    }).join("")
+    );
 }
 
 
