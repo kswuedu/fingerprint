@@ -1,0 +1,8 @@
+PASS - JavaScript 문법
+PASS - 독립 PDF 문서 생성
+PASS - 기존 화면 CSS와 PDF 분리
+PASS - 성향 컬러 PDF 전달
+PASS - 결과 내용 PDF 복사
+PASS - PDF 버튼 연결
+PASS - 모바일 분석 수정 유지
+PASS - 비밀번호 유지

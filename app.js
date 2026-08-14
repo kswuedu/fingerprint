@@ -1409,32 +1409,484 @@ restartBtn.addEventListener(
 // 결과 PDF
 // ==========================================
 
+
+// ==========================================
+// v7.5 PDF 전용 문서 생성
+// ==========================================
+function printResultAsPdf() {
+
+    const report =
+        document.getElementById(
+            "enhancedReport"
+        );
+
+    if (!report) {
+        alert(
+            "PDF로 저장할 결과를 찾을 수 없습니다."
+        );
+        return;
+    }
+
+    const participantText =
+        resultParticipant?.textContent ||
+        "FINGER IQ 분석 결과";
+
+    // 현재 성향 컬러를 실제 계산값으로 가져옵니다.
+    const computed =
+        window.getComputedStyle(report);
+
+    const accent =
+        computed.getPropertyValue("--accent").trim() ||
+        "#315ea8";
+
+    const accentSoft =
+        computed.getPropertyValue("--accent-soft").trim() ||
+        "#edf4ff";
+
+    const accentDeep =
+        computed.getPropertyValue("--accent-deep").trim() ||
+        "#1f427c";
+
+    // 인쇄 문서는 앱 화면과 분리하여 iframe 안에 독립적으로 생성합니다.
+    let frame =
+        document.getElementById(
+            "pdfPrintFrame"
+        );
+
+    if (frame) {
+        frame.remove();
+    }
+
+    frame =
+        document.createElement(
+            "iframe"
+        );
+
+    frame.id =
+        "pdfPrintFrame";
+
+    frame.setAttribute(
+        "aria-hidden",
+        "true"
+    );
+
+    frame.style.position =
+        "fixed";
+
+    frame.style.right =
+        "0";
+
+    frame.style.bottom =
+        "0";
+
+    frame.style.width =
+        "1px";
+
+    frame.style.height =
+        "1px";
+
+    frame.style.border =
+        "0";
+
+    frame.style.opacity =
+        "0";
+
+    document.body.appendChild(
+        frame
+    );
+
+    const doc =
+        frame.contentWindow.document;
+
+    const reportHtml =
+        report.outerHTML;
+
+    doc.open();
+
+    doc.write(`
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FINGER IQ 결과지</title>
+<style>
+@page {
+    size: A4 portrait;
+    margin: 7mm;
+}
+
+* {
+    box-sizing: border-box;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    color: #222;
+    font-family: Arial, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+}
+
+.pdf-page {
+    width: 196mm;
+    margin: 0 auto;
+    background: #fff;
+}
+
+.pdf-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 10px;
+    padding: 0 0 3mm;
+    margin-bottom: 2mm;
+    border-bottom: 2px solid ${accent};
+}
+
+.pdf-title .brand {
+    font-size: 7pt;
+    font-weight: 800;
+    letter-spacing: 1.4pt;
+    color: ${accentDeep};
+}
+
+.pdf-title h1 {
+    margin: 1mm 0 0;
+    font-size: 15pt;
+}
+
+.pdf-participant {
+    font-size: 7pt;
+    color: #666;
+    text-align: right;
+}
+
+.enhanced-report {
+    --accent: ${accent};
+    --accent-soft: ${accentSoft};
+    --accent-deep: ${accentDeep};
+    width: 100%;
+    margin: 0;
+    text-align: left;
+}
+
+.report-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+    padding-bottom: 1.8mm;
+    border-bottom: 1.5px solid ${accent};
+}
+
+.report-head h2 {
+    margin: 0.5mm 0 0;
+    font-size: 10pt;
+}
+
+.report-kicker {
+    font-size: 5pt;
+    font-weight: 800;
+    letter-spacing: 1.3pt;
+    color: ${accentDeep};
+}
+
+.report-mode-badge {
+    padding: 1mm 2mm;
+    border: 1px solid ${accent};
+    border-radius: 99px;
+    background: ${accentSoft};
+    color: ${accentDeep};
+    font-size: 5pt;
+    white-space: nowrap;
+}
+
+.report-section {
+    margin-top: 1.4mm;
+    padding: 1.7mm 2mm;
+    border: 1px solid #e3e5e8;
+    border-radius: 1.8mm;
+    background: #fff;
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+
+.report-section h3 {
+    margin: 0 0 0.7mm;
+    color: ${accentDeep};
+    font-size: 6.1pt;
+}
+
+#coreSummary strong {
+    display: block;
+    margin-bottom: 0.4mm;
+    font-size: 7.3pt;
+}
+
+#coreSummary p,
+.strength-card p,
+.compact-insight p,
+.insight-line,
+.engine-style,
+.report-note {
+    margin: 0;
+    color: #555;
+    font-size: 4.5pt;
+    line-height: 1.17;
+}
+
+.report-grid {
+    display: grid;
+    gap: 1mm;
+}
+
+.report-grid.three {
+    grid-template-columns: repeat(3, minmax(0,1fr));
+}
+
+.report-grid.two {
+    grid-template-columns: repeat(2, minmax(0,1fr));
+    margin-top: 1.4mm;
+}
+
+.report-grid.two > .report-section {
+    margin-top: 0;
+}
+
+.strength-card {
+    padding: 1.3mm;
+    border-radius: 1.5mm;
+    background: ${accentSoft};
+}
+
+.rank-label {
+    color: ${accentDeep};
+    font-size: 4.2pt;
+    font-weight: 800;
+}
+
+.strength-card h4 {
+    margin: 0.3mm 0 0.5mm;
+    font-size: 5.4pt;
+}
+
+.strength-card h4 span {
+    float: right;
+    color: #666;
+    font-size: 4.6pt;
+}
+
+.career-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6mm;
+}
+
+.career-chips > span {
+    padding: 0.6mm 1.1mm;
+    border-radius: 99px;
+    background: ${accentSoft};
+    color: ${accentDeep};
+    font-size: 4.4pt;
+}
+
+.career-chips .report-note {
+    flex-basis: 100%;
+    margin-top: 0.4mm;
+}
+
+.compact-insight + .compact-insight,
+.insight-line + .insight-line {
+    margin-top: 0.6mm;
+}
+
+.compact-insight b,
+.insight-line b {
+    font-size: 4.9pt;
+}
+
+.relationship-detail-card {
+    padding: 1.1mm;
+    border: 1px solid #e7e7e7;
+    border-radius: 1.4mm;
+    background: #fafafa;
+    break-inside: avoid;
+}
+
+.relationship-detail-card + .relationship-detail-card {
+    margin-top: 0.7mm;
+}
+
+.relationship-detail-title {
+    margin-bottom: 0.5mm;
+    color: ${accentDeep};
+    font-size: 5.3pt;
+    font-weight: 800;
+}
+
+.relationship-detail-card > div:not(.relationship-detail-title) {
+    margin-top: 0.35mm;
+}
+
+.relationship-detail-card b,
+.relationship-detail-card p,
+.relationship-phrase span {
+    font-size: 4.15pt;
+    line-height: 1.12;
+}
+
+.relationship-detail-card p {
+    margin: 0.15mm 0 0;
+    color: #555;
+}
+
+.relationship-phrase {
+    padding: 0.6mm;
+    border-radius: 1mm;
+    background: ${accentSoft};
+}
+
+.relationship-phrase span {
+    display: block;
+    margin-top: 0.2mm;
+    color: ${accentDeep};
+    font-weight: 700;
+}
+
+#allAreaAnalysis {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0,1fr));
+    gap: 0.6mm 2.5mm;
+}
+
+.area-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 4px;
+    margin-bottom: 0.3mm;
+    font-size: 4.3pt;
+}
+
+.area-head span {
+    color: #777;
+}
+
+.area-track {
+    height: 0.55mm;
+    overflow: hidden;
+    border-radius: 99px;
+    background: #e9eaec;
+}
+
+.area-track i {
+    display: block;
+    height: 100%;
+    background: ${accent};
+}
+
+.area-meaning-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0,1fr));
+    gap: 0.45mm 2.5mm;
+}
+
+.area-meaning-grid > div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1mm;
+    padding-bottom: 0.35mm;
+    border-bottom: 1px solid #eee;
+}
+
+.area-meaning-grid b {
+    font-size: 4.3pt;
+}
+
+.area-meaning-grid span {
+    color: #666;
+    font-size: 4pt;
+    line-height: 1.1;
+}
+
+.report-disclaimer {
+    margin-top: 1mm;
+    padding: 0.8mm;
+    border-radius: 1mm;
+    background: ${accentSoft};
+    color: ${accentDeep};
+    text-align: center;
+    font-size: 4.1pt;
+}
+
+/* 결과지 내부에서 화면 전용으로 남아 있을 수 있는 요소 제거 */
+.pdf-btn,
+.restart-btn,
+button {
+    display: none !important;
+}
+
+@media print {
+    html, body, .pdf-page {
+        width: auto;
+        margin: 0;
+    }
+}
+</style>
+</head>
+<body>
+<div class="pdf-page">
+    <div class="pdf-title">
+        <div>
+            <div class="brand">FINGER IQ REPORT</div>
+            <h1>개인 성향 분석 결과지</h1>
+        </div>
+        <div class="pdf-participant">${participantText}</div>
+    </div>
+    ${reportHtml}
+</div>
+</body>
+</html>
+    `);
+
+    doc.close();
+
+    // iframe 문서가 실제 레이아웃을 완성한 뒤 인쇄 창을 엽니다.
+    setTimeout(
+        () => {
+            try {
+                frame.contentWindow.focus();
+                frame.contentWindow.print();
+            } catch (error) {
+                console.error(
+                    "PDF 인쇄 오류:",
+                    error
+                );
+
+                alert(
+                    "PDF 저장 화면을 열지 못했습니다. 브라우저의 팝업/인쇄 권한을 확인해주세요."
+                );
+            }
+
+            setTimeout(
+                () => {
+                    frame.remove();
+                },
+                1500
+            );
+        },
+        350
+    );
+}
+
+
 if (pdfBtn) {
     pdfBtn.addEventListener(
         "click",
         () => {
-
-            document.body.classList.add(
-                "printing-report"
-            );
-
-            // 모바일 브라우저가 인쇄용 레이아웃을 먼저 그리도록 잠시 기다립니다.
-            setTimeout(
-                () => {
-
-                    window.print();
-
-                    setTimeout(
-                        () => {
-                            document.body.classList.remove(
-                                "printing-report"
-                            );
-                        },
-                        500
-                    );
-                },
-                150
-            );
+            printResultAsPdf();
         }
     );
 }
