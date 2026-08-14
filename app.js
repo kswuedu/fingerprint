@@ -165,6 +165,8 @@ let participant = {
 };
 
 
+let lastResult = null;
+
 // 지문 데이터
 let fingerprintImages = {};
 
@@ -309,9 +311,60 @@ function showScreen(screen) {
 // 검사 시작
 // ==========================================
 
+
+// ==========================================
+// v8 검사 데이터 완전 초기화
+// ==========================================
+function resetAllTestData() {
+
+    currentIndex = 0;
+    fingerprintImages = {};
+
+    if (
+        typeof repeatCaptures !== "undefined"
+    ) {
+        repeatCaptures = {};
+    }
+
+    if (
+        typeof participant === "object" &&
+        participant
+    ) {
+        participant.name = "";
+        participant.birth = "";
+        participant.consultant = "";
+        participant.age = "";
+        participant.gender = "";
+    }
+
+    lastResult = null;
+
+    [
+        "coreSummary",
+        "strengthTop3",
+        "careerRecommendations",
+        "growthPoints",
+        "relationshipStrengths",
+        "relationshipCautions",
+        "workStudyStyle",
+        "allAreaAnalysis"
+    ].forEach(id => {
+
+        const element =
+            document.getElementById(id);
+
+        if (element) {
+            element.innerHTML = "";
+        }
+    });
+}
+
 startBtn.addEventListener(
     "click",
     function () {
+
+        resetAllTestData();
+
 
         const name =
             nameInput.value.trim();
@@ -994,8 +1047,32 @@ analysisBtn.addEventListener(
                 return;
             }
 
-            fingerprintData[finger.key] =
-                pattern;
+            const detection =
+                imageData.detection || {};
+
+            fingerprintData[finger.key] = {
+                pattern,
+                effectivePattern:
+                    detection.effectivePattern,
+                fallbackCandidate:
+                    detection.fallbackCandidate,
+                confidence:
+                    detection.confidence,
+                probabilities:
+                    detection.debug?.probabilities ||
+                    detection.probabilities ||
+                    null,
+                ridgeScore:
+                    detection.debug?.ridgeScore ??
+                    detection.ridgeScore,
+                coherence:
+                    detection.debug?.coherence ??
+                    detection.coherence,
+                centerVariation:
+                    detection.debug?.centerVariation,
+                curvature:
+                    detection.debug?.curvature
+            };
         }
 
         let result;
@@ -1005,6 +1082,8 @@ analysisBtn.addEventListener(
                 FingerprintEngine.analyze(
                     fingerprintData
                 );
+
+            lastResult = result;
         } catch (error) {
             console.error(
                 "FINGER IQ 분석 엔진 오류:",
@@ -1363,8 +1442,8 @@ function renderResult(
     if (resultParticipant) {
         resultParticipant.textContent =
             participant.name
-                ? `${participant.name}님의 분석 결과`
-                : "분석 결과";
+                ? `${participant.name}님의 지문 데이터 기반 분석 결과`
+                : "현재 검사자의 지문 데이터 기반 분석 결과";
     }
 
     // 현재 결과지에 실제로 존재하는 상세 리포트만 렌더링합니다.
@@ -1384,7 +1463,9 @@ restartBtn.addEventListener(
     "click",
     function () {
 
-        currentIndex = 0;
+        
+        resetAllTestData();
+currentIndex = 0;
         fingerprintImages = {};
         repeatCaptures = {};
         fingers = [...fullFingers];

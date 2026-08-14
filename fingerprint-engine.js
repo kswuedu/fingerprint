@@ -1,5 +1,5 @@
 // ==========================================
-// FINGER IQ 1.0
+// FINGER IQ 2.0 PERSONALIZED
 // 지문 기반 다중지능 성향 분석 엔진
 // ==========================================
 
@@ -418,58 +418,233 @@ const FingerprintEngine = (() => {
     function analyze(fingerprintData) {
 
         const traitScores = {};
-
         const traitWeights = {};
 
-        // 초기화
-        Object.keys(FINGER_WEIGHTS.left_thumb)
-            .forEach(trait => {
+        const traitKeys =
+            Object.keys(
+                FINGER_WEIGHTS.left_thumb
+            );
 
-                traitScores[trait] = 0;
+        traitKeys.forEach(trait => {
+            traitScores[trait] = 0;
+            traitWeights[trait] = 0;
+        });
 
-                traitWeights[trait] = 0;
+        const fingerDetails = {};
 
-            });
-
-
-        // 10개 손가락 계산
+        // ----------------------------------
+        // 손가락별 상세 데이터 반영
+        // ----------------------------------
         Object.keys(fingerprintData)
             .forEach(fingerKey => {
 
-                const patternKey =
+                const raw =
                     fingerprintData[fingerKey];
-
-                const pattern =
-                    PATTERNS[patternKey];
 
                 const weights =
                     FINGER_WEIGHTS[fingerKey];
 
-                if (!pattern || !weights) {
+                if (!weights) {
                     return;
                 }
 
+                // 과거 버전 호환:
+                // "LOOP" 문자열만 들어와도 처리
+                const patternKey =
+                    typeof raw === "string"
+                        ? raw
+                        : (
+                            raw.pattern ||
+                            raw.effectivePattern ||
+                            raw.fallbackCandidate ||
+                            "UNKNOWN"
+                          );
 
-                Object.keys(
-                    pattern.traits
-                ).forEach(trait => {
+                // 후보확률
+                const probabilities =
+                    typeof raw === "object" &&
+                    raw.probabilities
+                        ? raw.probabilities
+                        : (
+                            typeof raw === "object" &&
+                            raw.debug &&
+                            raw.debug.probabilities
+                                ? raw.debug.probabilities
+                                : null
+                          );
 
-                    const weight =
-                        weights[trait] || 1;
+                // 패턴 혼합 traits 생성
+                const mixedTraits = {};
+                traitKeys.forEach(
+                    trait =>
+                        mixedTraits[trait] = 0
+                );
 
-                    traitScores[trait] +=
-                        pattern.traits[trait] *
-                        weight;
+                let probabilityTotal = 0;
 
-                    traitWeights[trait] +=
-                        weight;
+                if (probabilities) {
 
-                });
+                    Object.entries(
+                        probabilities
+                    ).forEach(
+                        ([candidateKey, percent]) => {
 
+                            const pattern =
+                                PATTERNS[candidateKey];
+
+                            const numeric =
+                                Number(percent);
+
+                            if (
+                                !pattern ||
+                                !Number.isFinite(numeric) ||
+                                numeric <= 0
+                            ) {
+                                return;
+                            }
+
+                            const p =
+                                numeric / 100;
+
+                            probabilityTotal += p;
+
+                            traitKeys.forEach(
+                                trait => {
+
+                                    mixedTraits[trait] +=
+                                        (pattern.traits[trait] || 0) *
+                                        p;
+                                }
+                            );
+                        }
+                    );
+                }
+
+                // 후보확률이 없으면 기존 확정 패턴 사용
+                if (
+                    probabilityTotal <= 0
+                ) {
+
+                    const fallbackPattern =
+                        PATTERNS[patternKey];
+
+                    if (!fallbackPattern) {
+                        return;
+                    }
+
+                    traitKeys.forEach(
+                        trait => {
+
+                            mixedTraits[trait] =
+                                fallbackPattern
+                                    .traits[trait] || 0;
+                        }
+                    );
+
+                    probabilityTotal = 1;
+                } else if (
+                    Math.abs(
+                        probabilityTotal - 1
+                    ) > 0.001
+                ) {
+
+                    traitKeys.forEach(
+                        trait => {
+
+                            mixedTraits[trait] =
+                                mixedTraits[trait] /
+                                probabilityTotal;
+                        }
+                    );
+                }
+
+                // 판독 신뢰 보정.
+                // 값이 없어도 과거 버전과 동일하게 1.0 사용.
+                const ridgeScore =
+                    typeof raw === "object"
+                        ? Number(
+                            raw.ridgeScore ??
+                            raw.debug?.ridgeScore ??
+                            100
+                          )
+                        : 100;
+
+                const confidence =
+                    typeof raw === "object"
+                        ? Number(
+                            raw.confidence ??
+                            raw.detectionConfidence ??
+                            100
+                          )
+                        : 100;
+
+                const coherence =
+                    typeof raw === "object"
+                        ? Number(
+                            raw.coherence ??
+                            raw.debug?.coherence ??
+                            1
+                          )
+                        : 1;
+
+                const qualityFactor =
+                    Math.max(
+                        0.55,
+                        Math.min(
+                            1,
+                            (
+                                Math.min(100, ridgeScore) / 100 * 0.45 +
+                                Math.min(100, confidence) / 100 * 0.35 +
+                                Math.min(1, coherence) * 0.20
+                            )
+                        )
+                    );
+
+                traitKeys.forEach(
+                    trait => {
+
+                        const weight =
+                            weights[trait] || 1;
+
+                        traitScores[trait] +=
+                            mixedTraits[trait] *
+                            weight *
+                            qualityFactor;
+
+                        traitWeights[trait] +=
+                            weight *
+                            qualityFactor;
+                    }
+                );
+
+                fingerDetails[fingerKey] = {
+                    pattern: patternKey,
+                    probabilities:
+                        probabilities || {
+                            [patternKey]: 100
+                        },
+                    qualityFactor:
+                        Math.round(
+                            qualityFactor * 100
+                        ) / 100,
+                    ridgeScore:
+                        Number.isFinite(ridgeScore)
+                            ? ridgeScore
+                            : null,
+                    confidence:
+                        Number.isFinite(confidence)
+                            ? confidence
+                            : null,
+                    coherence:
+                        Number.isFinite(coherence)
+                            ? coherence
+                            : null
+                };
             });
 
-
+        // ----------------------------------
         // 평균 성향 점수
+        // ----------------------------------
         Object.keys(traitScores)
             .forEach(trait => {
 
@@ -482,18 +657,13 @@ const FingerprintEngine = (() => {
                 } else {
 
                     traitScores[trait] = 0;
-
                 }
-
             });
-
 
         // ----------------------------------
         // 8대 지능 계산
         // ----------------------------------
-
         const intelligenceScores = {};
-
 
         Object.keys(INTELLIGENCES)
             .forEach(key => {
@@ -510,75 +680,45 @@ const FingerprintEngine = (() => {
                     score +=
                         traitScores[trait] *
                         intelligence.traits[trait];
-
                 });
 
-
-                // 1~10 → 0~100
                 intelligenceScores[key] =
                     Math.round(
                         score * 10
                     );
-
             });
-
-
-        // ----------------------------------
-        // 강점 순위
-        // ----------------------------------
 
         const ranking =
             Object.keys(
                 intelligenceScores
             )
             .map(key => ({
-
-                key: key,
-
+                key,
                 name:
                     INTELLIGENCES[key].name,
-
                 score:
                     intelligenceScores[key]
-
             }))
             .sort(
                 (a, b) =>
                     b.score - a.score
             );
 
-
-        // ----------------------------------
-        // 학습스타일
-        // ----------------------------------
-
         const learningStyle =
             determineLearningStyle(
                 intelligenceScores
             );
 
-
-        // ----------------------------------
-        // 최종 결과
-        // ----------------------------------
-
         return {
-
             traits: traitScores,
-
             intelligences:
                 intelligenceScores,
-
-            ranking: ranking,
-
+            ranking,
             top3:
                 ranking.slice(0, 3),
-
-            learningStyle:
-                learningStyle
-
+            learningStyle,
+            fingerDetails
         };
-
     }
 
 
