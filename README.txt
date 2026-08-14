@@ -1,1 +1,8 @@
-My Personality Revealed Through Fingerprints
+FINGER IQ FINAL v7.1 FIX
+
+수정:
+- '지문 분석 시작' 버튼을 눌러도 결과 화면으로 이동하지 않던 문제 보정
+- 결과 화면으로 먼저 전환한 뒤 상세 리포트를 렌더링하도록 순서 변경
+- 제거된 중복 결과 카드 때문에 오류가 나더라도 화면 전환이 막히지 않도록 방어 처리
+- 기존 v7 컬러 리포트 기능 유지
+- 비밀번호 finger1004

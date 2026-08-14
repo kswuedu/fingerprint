@@ -998,19 +998,40 @@ analysisBtn.addEventListener(
                 pattern;
         }
 
-        const result =
-            FingerprintEngine.analyze(
+        try {
+            const result =
+                FingerprintEngine.analyze(
+                    fingerprintData
+                );
+
+            // 먼저 결과 화면으로 이동한 뒤 내용을 렌더링합니다.
+            // 결과 카드 일부가 제거/변경되어도 화면 전환 자체가 막히지 않도록 합니다.
+            showScreen(
+                resultScreen
+            );
+
+            renderResult(
+                result,
                 fingerprintData
             );
 
-        renderResult(
-            result,
-            fingerprintData
-        );
+            window.scrollTo({
+                top: 0,
+                behavior: "smooth"
+            });
 
-        showScreen(
-            resultScreen
-        );
+        } catch (error) {
+
+            console.error(
+                "FINGER IQ 결과 생성 오류:",
+                error
+            );
+
+            // 화면 이동 실패처럼 보이지 않도록 오류 내용을 안내합니다.
+            alert(
+                "결과를 만드는 중 오류가 발생했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요."
+            );
+        }
     }
 );
 
@@ -1101,6 +1122,15 @@ function renderDetailedReport(result, fingerprintData) {
     if (!ranking.length) return;
     const top3 = ranking.slice(0,3);
     const low2 = ranking.slice(-2).reverse();
+
+    if (
+        top3.length < 3 ||
+        top3.some(item => !REPORT_INFO[item.key])
+    ) {
+        throw new Error(
+            "상세 결과 데이터 형식이 올바르지 않습니다."
+        );
+    }
 
     const enhancedReport =
         document.getElementById("enhancedReport");
@@ -1263,8 +1293,10 @@ function renderResult(
     );
 
 
-    learningStyleResult.textContent =
-        result.learningStyle.description;
+    if (learningStyleResult) {
+        learningStyleResult.textContent =
+            result.learningStyle.description;
+    }
 
 
     if (fingerPatternResults) fingerPatternResults.innerHTML = "";

@@ -1,0 +1,6 @@
+PASS - JavaScript 문법
+PASS - 분석 후 결과화면 선이동
+PASS - 오류 처리
+PASS - 비밀번호
+PASS - 컬러 결과지
+PASS - 간편/정밀
