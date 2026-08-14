@@ -1159,97 +1159,198 @@ function setReportHtml(id, html) {
 }
 
 function renderDetailedReport(result, fingerprintData) {
-    const ranking = result.ranking || [];
-    if (!ranking.length) return;
-    const top3 = ranking.slice(0,3);
-    const low2 = ranking.slice(-2).reverse();
+    const ranking =
+        Array.isArray(result?.ranking)
+            ? result.ranking.filter(item =>
+                item &&
+                item.key &&
+                REPORT_INFO[item.key]
+            )
+            : [];
 
-    if (
-        top3.length < 3 ||
-        top3.some(item => !REPORT_INFO[item.key])
-    ) {
-        throw new Error(
-            "상세 결과 데이터 형식이 올바르지 않습니다."
-        );
+    if (!ranking.length) {
+        console.warn("상세 리포트용 ranking 데이터가 없습니다.");
+        return;
     }
 
+    const top3 =
+        ranking.slice(
+            0,
+            Math.min(3, ranking.length)
+        );
+
+    const low2 =
+        ranking.slice(-2).reverse();
+
     const enhancedReport =
-        document.getElementById("enhancedReport");
+        document.getElementById(
+            "enhancedReport"
+        );
 
     if (enhancedReport) {
         enhancedReport.className =
             "enhanced-report " +
-            (REPORT_THEME[top3[0].key] || "theme-blue");
+            (
+                REPORT_THEME[top3[0]?.key] ||
+                "theme-blue"
+            );
     }
 
-    document.getElementById("reportModeBadge").textContent =
-        testMode === "simple" ? "간편검사 · 4개 지문 · 각 1회" : "정밀검사 · 10개 지문 · 각 1회";
+    const modeBadge =
+        document.getElementById(
+            "reportModeBadge"
+        );
 
-    setReportHtml("coreSummary", `
-        <strong>${top3.map(x=>x.name).join(" · ")}</strong>
-        <p>이번 결과에서는 <b>${top3[0].name}</b> 영역이 가장 높게 나타났으며
-        ${top3[1].name}, ${top3[2].name} 영역이 뒤를 이었습니다.
-        상위 영역의 특징을 함께 활용할 수 있는 활동과 환경을 탐색해보세요.</p>`);
+    if (modeBadge) {
+        modeBadge.textContent =
+            testMode === "simple"
+                ? "간편검사 · 4개 지문 · 각 1회"
+                : "정밀검사 · 10개 지문 · 각 1회";
+    }
 
-    setReportHtml("strengthTop3", top3.map((x,i)=>`
-        <article class="strength-card">
-            <div class="rank-label">TOP ${i+1}</div>
-            <h4>${x.name}<span>${x.score}점</span></h4>
-            <p>${REPORT_INFO[x.key].strength}</p>
-        </article>`).join(""));
+    const topNames =
+        top3
+            .map(item => item.name)
+            .filter(Boolean)
+            .join(" · ");
+
+    const first =
+        top3[0] || ranking[0];
+
+    const second =
+        top3[1];
+
+    const third =
+        top3[2];
+
+    setReportHtml(
+        "coreSummary",
+        `<strong>${topNames}</strong>
+        <p>이번 결과에서는 <b>${first?.name || "주요 성향"}</b> 영역이 상대적으로 높게 나타났습니다.${
+            second
+                ? ` ${second.name}${third ? `, ${third.name}` : ""} 영역도 함께 살펴볼 수 있습니다.`
+                : ""
+        } 상위 영역의 특징을 활동과 환경을 탐색하는 참고자료로 활용해보세요.</p>`
+    );
+
+    setReportHtml(
+        "strengthTop3",
+        top3.map((x,i)=>`
+            <article class="strength-card">
+                <div class="rank-label">TOP ${i+1}</div>
+                <h4>${x.name}<span>${Number.isFinite(Number(x.score)) ? x.score : "-"}점</span></h4>
+                <p>${REPORT_INFO[x.key]?.strength || ""}</p>
+            </article>`
+        ).join("")
+    );
 
     const careers=[];
-    top3.forEach(x=>REPORT_INFO[x.key].careers.forEach(c=>{if(!careers.includes(c)) careers.push(c)}));
+
+    top3.forEach(x => {
+        const items =
+            REPORT_INFO[x.key]?.careers || [];
+
+        items.forEach(c => {
+            if (!careers.includes(c)) {
+                careers.push(c);
+            }
+        });
+    });
+
     setReportHtml(
         "careerRecommendations",
-        careers.slice(0,9).map(c=>`<span>${c}</span>`).join("") +
+        careers.slice(0,9)
+            .map(c=>`<span>${c}</span>`)
+            .join("") +
         `<p class="report-note">직업·역할은 진로 판정이 아니라 상위 영역을 활용해볼 수 있는 활동 분야의 예시입니다.</p>`
     );
 
     setReportHtml(
         "growthPoints",
         low2.map(x=>`
-        <div class="compact-insight"><b>${x.name} · ${x.score}점</b><p>${REPORT_INFO[x.key].growth}</p></div>`).join("")
+            <div class="compact-insight">
+                <b>${x.name} · ${Number.isFinite(Number(x.score)) ? x.score : "-"}점</b>
+                <p>${REPORT_INFO[x.key]?.growth || ""}</p>
+            </div>`
+        ).join("")
     );
 
     setReportHtml(
         "relationshipStrengths",
         top3.slice(0,2).map(x=>`
-        <div class="compact-insight"><b>${x.name}</b><p>${REPORT_INFO[x.key].relS}</p></div>`).join("")
+            <div class="compact-insight">
+                <b>${x.name}</b>
+                <p>${REPORT_INFO[x.key]?.relS || ""}</p>
+            </div>`
+        ).join("")
     );
 
     setReportHtml(
         "relationshipCautions",
         top3.slice(0,2).map(x=>{
-            const d = RELATIONSHIP_DETAIL[x.key];
+            const d =
+                RELATIONSHIP_DETAIL[x.key];
+
+            if (!d) {
+                return `
+                    <article class="relationship-detail-card">
+                        <div class="relationship-detail-title">${x.name}</div>
+                        <p>${REPORT_INFO[x.key]?.relC || ""}</p>
+                    </article>`;
+            }
+
             return `
                 <article class="relationship-detail-card">
                     <div class="relationship-detail-title">${x.name}</div>
-                    <div><b>갈등 상황에서 나타날 수 있는 모습</b><p>${d.conflict}</p></div>
-                    <div><b>상대가 필요로 할 수 있는 것</b><p>${d.otherNeeds}</p></div>
-                    <div><b>관계에서 연습하면 좋은 행동</b><p>${d.practice}</p></div>
-                    <div class="relationship-phrase"><b>도움이 되는 표현</b><span>${d.phrase}</span></div>
-                </article>
-            `;
+                    <div><b>갈등 상황에서 나타날 수 있는 모습</b><p>${d.conflict || ""}</p></div>
+                    <div><b>상대가 필요로 할 수 있는 것</b><p>${d.otherNeeds || ""}</p></div>
+                    <div><b>관계에서 연습하면 좋은 행동</b><p>${d.practice || ""}</p></div>
+                    <div class="relationship-phrase"><b>도움이 되는 표현</b><span>${d.phrase || ""}</span></div>
+                </article>`;
         }).join("")
     );
 
+    const learningDescription =
+        result?.learningStyle?.description ||
+        "상위 성향을 활용해 시각화, 설명, 반복, 체험 등 여러 방식을 조합해보세요.";
+
     setReportHtml(
         "workStudyStyle",
-        `<p class="engine-style">${result.learningStyle.description}</p>` +
-        top3.slice(0,2).map(x=>`<div class="insight-line"><b>${x.name}</b> — ${REPORT_INFO[x.key].work}</div>`).join("")
+        `<p class="engine-style">${learningDescription}</p>` +
+        top3.slice(0,2).map(x=>`
+            <div class="insight-line">
+                <b>${x.name}</b> — ${REPORT_INFO[x.key]?.work || ""}
+            </div>`
+        ).join("")
     );
 
     setReportHtml(
         "allAreaAnalysis",
         ranking.map(x=>{
-        const level=x.score>=75?"높게 나타남":x.score>=60?"상대적 강점":x.score>=45?"균형 영역":"성장 아이디어 영역";
-        return `<div class="area-row"><div class="area-head"><b>${x.name}</b><span>${x.score} · ${level}</span></div>
-        <div class="area-track"><i style="width:${Math.max(0,Math.min(100,x.score))}%"></i></div></div>`;
-    }).join("")
+            const score =
+                Number.isFinite(Number(x.score))
+                    ? Number(x.score)
+                    : 0;
+
+            const level =
+                score >= 75 ? "높게 나타남" :
+                score >= 60 ? "상대적 강점" :
+                score >= 45 ? "균형 영역" :
+                "성장 아이디어 영역";
+
+            return `
+                <div class="area-row">
+                    <div class="area-head">
+                        <b>${x.name}</b>
+                        <span>${score} · ${level}</span>
+                    </div>
+                    <div class="area-track">
+                        <i style="width:${Math.max(0,Math.min(100,score))}%"></i>
+                    </div>
+                </div>`;
+        }).join("")
     );
 }
-
 
 // ==========================================
 // 결과 화면 렌더링
@@ -1259,140 +1360,15 @@ function renderResult(
     result,
     fingerprintData
 ) {
-
-    const meta = [];
-
-    if (participant.name) {
-        meta.push(participant.name);
+    if (resultParticipant) {
+        resultParticipant.textContent =
+            participant.name
+                ? `${participant.name}님의 분석 결과`
+                : "분석 결과";
     }
 
-    if (participant.birth) {
-        meta.push(participant.birth);
-    }
-
-    if (participant.consultant) {
-        meta.push(`상담자 ${participant.consultant}`);
-    }
-
-    resultParticipant.textContent =
-        meta.join(" · ");
-
-
-    if (top3Results) top3Results.innerHTML = "";
-
-    result.top3.forEach(
-        (item, index) => {
-
-            const card =
-                document.createElement("div");
-
-            card.className =
-                "top3-item";
-
-            card.innerHTML = `
-                <div class="top3-rank">
-                    ${index + 1}
-                </div>
-                <div class="top3-name">
-                    ${item.name}
-                </div>
-                <div class="top3-score">
-                    ${item.score}점
-                </div>
-            `;
-
-            if (top3Results) {
-                top3Results.appendChild(card);
-            }
-        }
-    );
-
-
-    if (intelligenceResults) intelligenceResults.innerHTML = "";
-
-    result.ranking.forEach(
-        item => {
-
-            const row =
-                document.createElement("div");
-
-            row.className =
-                "intelligence-row";
-
-            row.innerHTML = `
-                <div class="intelligence-row-head">
-                    <span>${item.name}</span>
-                    <strong>${item.score}</strong>
-                </div>
-                <div class="score-track">
-                    <div
-                        class="score-fill"
-                        style="width:${Math.max(
-                            0,
-                            Math.min(100, item.score)
-                        )}%"
-                    ></div>
-                </div>
-            `;
-
-            if (intelligenceResults) {
-                intelligenceResults.appendChild(row);
-            }
-        }
-    );
-
-
-    if (learningStyleResult) {
-        learningStyleResult.textContent =
-            result.learningStyle.description;
-    }
-
-
-    if (fingerPatternResults) fingerPatternResults.innerHTML = "";
-
-    fingers.forEach(
-        finger => {
-
-            const patternKey =
-                fingerprintData[finger.key];
-
-            const pattern =
-                FingerprintEngine.patterns[
-                    patternKey
-                ];
-
-            const item =
-                document.createElement("div");
-
-            item.className =
-                "finger-pattern-item";
-
-            item.innerHTML = `
-                <span>
-                    ${finger.hand} ${finger.name}
-                </span>
-                <strong>
-                    ${
-                        pattern
-                            ? pattern.label
-                            : patternKey
-                    }
-                    ${
-                        fingerprintImages[finger.key] &&
-                        fingerprintImages[finger.key].detection &&
-                        fingerprintImages[finger.key].detection.usedFallback
-                            ? " (낮은 신뢰도)"
-                            : ""
-                    }
-                </strong>
-            `;
-
-            if (fingerPatternResults) {
-                fingerPatternResults.appendChild(item);
-            }
-        }
-    );
-
+    // 현재 결과지에 실제로 존재하는 상세 리포트만 렌더링합니다.
+    // 과거에 삭제된 TOP3/손가락 결과/중복 점수 DOM에는 접근하지 않습니다.
     renderDetailedReport(
         result,
         fingerprintData
@@ -1437,17 +1413,28 @@ if (pdfBtn) {
     pdfBtn.addEventListener(
         "click",
         () => {
-            document.body.classList.add("printing-report");
-            window.print();
 
+            document.body.classList.add(
+                "printing-report"
+            );
+
+            // 모바일 브라우저가 인쇄용 레이아웃을 먼저 그리도록 잠시 기다립니다.
             setTimeout(
                 () => {
-                    document.body.classList.remove("printing-report");
+
+                    window.print();
+
+                    setTimeout(
+                        () => {
+                            document.body.classList.remove(
+                                "printing-report"
+                            );
+                        },
+                        500
+                    );
                 },
-                500
+                150
             );
         }
     );
 }
-
-

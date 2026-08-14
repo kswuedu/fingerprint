@@ -1,0 +1,7 @@
+PASS - JS 문법
+PASS - 과거 삭제 DOM 렌더링 제거
+PASS - 모바일 안전 ranking 처리
+PASS - learningStyle 누락 방어
+PASS - 결과 렌더러 단순화
+PASS - PDF 저장 유지
+PASS - 비밀번호 유지
