@@ -584,9 +584,13 @@ reader.onload =
                     file,
                     img
                 );
+         const currentFinger =
+    fingers[currentIndex];
+
          const fingerprint =
     FingerprintDetector.analyze(
-        img
+        img,
+        currentFinger ? currentFinger.key : undefined
     );
             // 품질 결과 표시
             const qualityBox =
@@ -686,14 +690,18 @@ fingerprintBox.innerHTML = `
                     중심변화 ${fingerprint.debug.centerVariation ?? "-"} ·
                     곡률 ${fingerprint.debug.curvature ?? "-"} ·
                     유효융선 ${fingerprint.debug.usableRidgeRatio ?? "-"} ·
-                    ROI ${fingerprint.debug.roiScale ?? "-"}
+                    ROI ${fingerprint.debug.roiScale ?? "-"} ·
+                    방향편향 ${fingerprint.debug.lateralBias ?? "-"} ·
+                    코어군집 ${fingerprint.debug.coreClusters ?? "-"}
                     ${
                         fingerprint.debug.scores
                             ? `<br>후보비율
                                평아치 ${fingerprint.debug.probabilities?.ARCH ?? "-"}% /
                                텐트아치 ${fingerprint.debug.probabilities?.TENTED_ARCH ?? "-"}% /
-                               루프 ${fingerprint.debug.probabilities?.LOOP ?? "-"}% /
-                               소용돌이 ${fingerprint.debug.probabilities?.WHORL ?? "-"}%`
+                               척골루프 ${fingerprint.debug.probabilities?.LOOP ?? "-"}% /
+                               요골루프 ${fingerprint.debug.probabilities?.RADIAL_LOOP ?? "-"}% /
+                               소용돌이 ${fingerprint.debug.probabilities?.WHORL ?? "-"}% /
+                               이중루프 ${fingerprint.debug.probabilities?.DOUBLE_LOOP ?? "-"}%`
                             : ""
                     }
                 </div>
