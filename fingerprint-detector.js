@@ -163,6 +163,91 @@ const FingerprintDetector = (() => {
         return pairs ? total / pairs : 0;
     }
 
+    // --------------------------------------
+    // 방향성(요골/척골) 및 코어 개수 추정
+    //
+    // 촬영 가이드가 손끝을 화면 중앙에 정렬시키는 것을 전제로,
+    // 곡률이 높은 융선(core 후보)이 좌/우 어느 쪽으로 치우쳐
+    // 몰려 있는지를 본다. 이 편향과 "어느 손의 어느 손가락인지"를
+    // 결합하면 loop가 새끼손가락 쪽으로 열리는지(ulnar)
+    // 엄지 쪽으로 열리는지(radial)를 근사할 수 있다.
+    //
+    // 주의: 사용자가 카메라를 회전시켜 촬영하면 이 근사는 흔들릴 수
+    // 있으므로, 다른 신호(margin)가 약할 때는 낮은 가중치만 준다.
+    // --------------------------------------
+    function lateralBias(blocks, width, height) {
+        const cx = width / 2, cy = height / 2;
+        const maxR = Math.min(width, height) * 0.42;
+
+        const chosen = blocks.filter(b => {
+            if (b.coherence < 0.22) return false;
+            const r = Math.hypot(b.x - cx, b.y - cy);
+            return r < maxR;
+        });
+
+        if (chosen.length < 6) return { bias: 0, count: chosen.length };
+
+        let weighted = 0, weightSum = 0;
+        for (const b of chosen) {
+            const w = b.coherence * (b.strongRatio + 0.1);
+            weighted += ((b.x - cx) / (width / 2)) * w;
+            weightSum += w;
+        }
+
+        // -1(좌측 치우침) ~ +1(우측 치우침)
+        return {
+            bias: weightSum ? weighted / weightSum : 0,
+            count: chosen.length
+        };
+    }
+
+    // 곡률이 높은 블록들을 인접성 기준으로 군집화해서
+    // 서로 떨어진 core 후보가 몇 개인지 센다(이중 루프/두 코어 판별용).
+    function coreClusterCount(blocks, width, height) {
+        const cx = width / 2, cy = height / 2;
+        const maxR = Math.min(width, height) * 0.40;
+        const blockSpan = Math.min(width, height) / 10;
+
+        const candidates = blocks.filter(b => {
+            if (b.coherence < 0.30) return false;
+            const r = Math.hypot(b.x - cx, b.y - cy);
+            return r < maxR;
+        });
+
+        if (candidates.length < 6) return { clusters: candidates.length ? 1 : 0, points: candidates.length };
+
+        const visited = new Array(candidates.length).fill(false);
+        let clusterCount = 0;
+        const linkDist = blockSpan * 1.8;
+
+        for (let i = 0; i < candidates.length; i++) {
+            if (visited[i]) continue;
+            clusterCount++;
+            const stack = [i];
+            visited[i] = true;
+            let size = 0;
+
+            while (stack.length) {
+                const idx = stack.pop();
+                size++;
+                const a = candidates[idx];
+                for (let j = 0; j < candidates.length; j++) {
+                    if (visited[j]) continue;
+                    const b = candidates[j];
+                    if (Math.hypot(a.x - b.x, a.y - b.y) <= linkDist) {
+                        visited[j] = true;
+                        stack.push(j);
+                    }
+                }
+            }
+
+            // 너무 작은(2블록 이하) 군집은 노이즈로 간주해 아래에서 보정
+            if (size <= 2) clusterCount--;
+        }
+
+        return { clusters: Math.max(0, clusterCount), points: candidates.length };
+    }
+
     function evaluateROI(roi) {
         const imageData = roi.ctx.getImageData(0, 0, roi.canvas.width, roi.canvas.height);
         const gray = grayFromImageData(imageData);
@@ -170,6 +255,8 @@ const FingerprintDetector = (() => {
         const field = orientationField(gray, roi.canvas.width, roi.canvas.height);
         const center = circularVariation(field.blocks, roi.canvas.width, roi.canvas.height);
         const curvature = curvatureScore(field.blocks, roi.canvas.width, roi.canvas.height);
+        const lateral = lateralBias(field.blocks, roi.canvas.width, roi.canvas.height);
+        const cores = coreClusterCount(field.blocks, roi.canvas.width, roi.canvas.height);
 
         // Fingerprint-likeness: repeated fine edges + coherent local orientations.
         // This is intentionally not a hard "photo sharpness" score.
@@ -187,6 +274,10 @@ const FingerprintDetector = (() => {
             centerVariation: center.variation,
             centerCount: center.count,
             curvature,
+            lateralBias: lateral.bias,
+            lateralSamples: lateral.count,
+            coreClusters: cores.clusters,
+            corePoints: cores.points,
             ridgeScore
         };
     }
@@ -212,19 +303,21 @@ const FingerprintDetector = (() => {
         return evaluated[0];
     }
 
-    function classify(best) {
+    function classify(best, fingerKey) {
         const v = best.centerVariation;
         const c = best.curvature;
         const coherence = best.field.coherenceRatio;
 
         // NIST general pattern families:
-        // Arch (plain/tented), Loop (left/right slant), Whorl.
+        // Arch (plain/tented), Loop (ulnar/radial), Whorl (incl. two-core/double loop).
         // This browser implementation estimates these from the orientation field.
         // It does NOT claim examiner-grade core/delta detection.
         let arch = 8;
         let tented = 8;
-        let loop = 8;
+        let loop = 8;       // ulnar loop (little-finger side) — kept as "LOOP" for compatibility
+        let radialLoop = 4;
         let whorl = 8;
+        let doubleLoop = 2;
 
         if (v < 0.14) arch += 42;
         else if (v < 0.24) { arch += 24; tented += 16; loop += 10; }
@@ -241,11 +334,45 @@ const FingerprintDetector = (() => {
         if (v >= 0.25 && v <= 0.48) loop += 14;
         if (v > 0.44 && c > 0.31) whorl += 18;
 
+        // ---- 방향성(요골/척골 루프) ----
+        // loop 계열 신호가 어느 정도 있을 때만 방향 편향을 반영한다.
+        // hand 정보가 없으면(과거 호출 호환) 방향 판별을 건너뛴다.
+        const isLoopish = v >= 0.20 && v < 0.50;
+        if (isLoopish && fingerKey && best.lateralSamples >= 6) {
+            const hand = fingerKey.startsWith("left_") ? "left" : "right";
+            // 오른손: 왼쪽(엄지 쪽)으로 치우치면 radial, 오른쪽(새끼 쪽)이면 ulnar
+            // 왼손: 오른쪽(엄지 쪽)으로 치우치면 radial, 왼쪽(새끼 쪽)이면 ulnar
+            const towardThumb =
+                hand === "right"
+                    ? best.lateralBias < 0
+                    : best.lateralBias > 0;
+
+            const strength = Math.min(1, Math.abs(best.lateralBias) * 2.2);
+            const shift = Math.round(26 * strength);
+
+            if (towardThumb) {
+                radialLoop += shift;
+                loop -= Math.round(shift * 0.4);
+            } else {
+                loop += Math.round(shift * 0.5);
+            }
+        }
+
+        // ---- 코어 2개 이상(이중 루프/두 코어) ----
+        if (best.coreClusters >= 2 && best.corePoints >= 8) {
+            const clusterBoost = best.coreClusters >= 3 ? 30 : 20;
+            doubleLoop += clusterBoost;
+            whorl += Math.round(clusterBoost * 0.5);
+            loop += Math.round(clusterBoost * 0.25);
+        }
+
         const list = [
             { pattern: "ARCH", label: "평아치형 후보", score: arch },
             { pattern: "TENTED_ARCH", label: "텐트형 아치 후보", score: tented },
-            { pattern: "LOOP", label: "루프형 후보", score: loop },
-            { pattern: "WHORL", label: "소용돌이형 후보", score: whorl }
+            { pattern: "LOOP", label: "척골 루프형 후보", score: loop },
+            { pattern: "RADIAL_LOOP", label: "요골 루프형 후보", score: radialLoop },
+            { pattern: "WHORL", label: "소용돌이형 후보", score: whorl },
+            { pattern: "DOUBLE_LOOP", label: "이중 루프(두 코어) 후보", score: doubleLoop }
         ].sort((a, b) => b.score - a.score);
 
         const total = list.reduce((sum, x) => sum + Math.max(0, x.score), 0) || 1;
@@ -263,13 +390,15 @@ const FingerprintDetector = (() => {
                 ARCH: arch,
                 TENTED_ARCH: tented,
                 LOOP: loop,
-                WHORL: whorl
+                RADIAL_LOOP: radialLoop,
+                WHORL: whorl,
+                DOUBLE_LOOP: doubleLoop
             },
             probabilities
         };
     }
 
-    function analyze(image) {
+    function analyze(image, fingerKey) {
         if (!image || !image.naturalWidth) {
             return {
                 success: false,
@@ -282,7 +411,7 @@ const FingerprintDetector = (() => {
 
         const source = sourceCanvas(image);
         const best = chooseBestROI(source);
-        const classified = classify(best);
+        const classified = classify(best, fingerKey);
         const margin = classified.first.score - classified.second.score;
 
         const debug = {
@@ -295,6 +424,8 @@ const FingerprintDetector = (() => {
             coherence: Math.round(best.field.coherenceRatio * 1000) / 1000,
             centerVariation: Math.round(best.centerVariation * 1000) / 1000,
             curvature: Math.round(best.curvature * 1000) / 1000,
+            lateralBias: Math.round(best.lateralBias * 1000) / 1000,
+            coreClusters: best.coreClusters,
             ridgeScore: best.ridgeScore,
             scores: classified.scores,
             probabilities: classified.probabilities
@@ -412,8 +543,10 @@ const FingerprintDetector = (() => {
         const reasons = {
             ARCH: "선택된 영역에서 비교적 완만하고 일관된 융선 흐름이 관찰됩니다.",
             TENTED_ARCH: "선택된 영역에서 아치형 흐름과 중앙부의 비교적 급한 방향 변화가 함께 관찰됩니다.",
-            LOOP: "선택된 영역에서 되굽는 형태를 시사하는 중간 수준의 방향 변화와 곡률이 관찰됩니다.",
-            WHORL: "선택된 영역의 중심부에서 큰 방향 변화와 곡률이 관찰됩니다."
+            LOOP: "선택된 영역에서 새끼손가락 방향으로 되굽는 형태(척골 루프)를 시사하는 방향 변화가 관찰됩니다.",
+            RADIAL_LOOP: "선택된 영역에서 엄지손가락 방향으로 되굽는 형태(요골 루프)를 시사하는 방향 변화가 관찰됩니다.",
+            WHORL: "선택된 영역의 중심부에서 큰 방향 변화와 곡률이 관찰됩니다.",
+            DOUBLE_LOOP: "선택된 영역 중심부에서 서로 떨어진 두 개의 융선 중심(코어)이 관찰됩니다."
         };
 
         return {
